@@ -8,6 +8,7 @@ import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.utils.Utils;
 import com.rabbitmq.client.AMQP.Queue;
 import com.rabbitmq.client.*;
+import com.rapportive.storm.amqp.AMQPScheme;
 import com.rapportive.storm.amqp.QueueDeclaration;
 import org.apache.log4j.Logger;
 
@@ -92,7 +93,7 @@ public class AMQPSpout implements IRichSpout {
 
     private final QueueDeclaration queueDeclaration;
 
-    private final Scheme serialisationScheme;
+    private final AMQPScheme serialisationScheme;
 
     private transient Connection amqpConnection;
     private transient Channel amqpChannel;
@@ -111,7 +112,7 @@ public class AMQPSpout implements IRichSpout {
      * will declare a queue according to the specified
      * <tt>queueDeclaration</tt>, subscribe to the queue, and start consuming
      * messages.  It will use the provided <tt>scheme</tt> to deserialise each
-     * AMQP message into a Storm tuple. Note that failed messages will not be 
+     * AMQP message into a Storm tuple. Note that failed messages will not be
      * requeued.
      *
      * @param host  hostname of the AMQP broker node
@@ -123,7 +124,7 @@ public class AMQPSpout implements IRichSpout {
      * @param scheme  {@link backtype.storm.spout.Scheme} used to deserialise
      *          each AMQP message into a Storm tuple
      */
-    public AMQPSpout(String host, int port, String username, String password, String vhost, QueueDeclaration queueDeclaration, Scheme scheme) {
+    public AMQPSpout(String host, int port, String username, String password, String vhost, QueueDeclaration queueDeclaration, AMQPScheme scheme) {
         this(host, port, username, password, vhost, queueDeclaration, scheme, false);
     }
 
@@ -143,9 +144,9 @@ public class AMQPSpout implements IRichSpout {
      * @param queueDeclaration  declaration of the queue / exchange bindings
      * @param scheme  {@link backtype.storm.spout.Scheme} used to deserialise
      *          each AMQP message into a Storm tuple
-     * @param requeueOnFail  whether messages should be requeued on failure 
+     * @param requeueOnFail  whether messages should be requeued on failure
      */
-    public AMQPSpout(String host, int port, String username, String password, String vhost, QueueDeclaration queueDeclaration, Scheme scheme, boolean requeueOnFail) {
+    public AMQPSpout(String host, int port, String username, String password, String vhost, QueueDeclaration queueDeclaration, AMQPScheme scheme, boolean requeueOnFail) {
         this.amqpHost = host;
         this.amqpPort = port;
         this.amqpUsername = username;
@@ -153,7 +154,7 @@ public class AMQPSpout implements IRichSpout {
         this.amqpVhost = vhost;
         this.queueDeclaration = queueDeclaration;
         this.requeueOnFail = requeueOnFail;
-        
+
         this.serialisationScheme = scheme;
     }
 
@@ -221,10 +222,10 @@ public class AMQPSpout implements IRichSpout {
      * Tells the AMQP broker to drop (Basic.Reject) the message.
      *
      * requeueOnFail constructor parameter determines whether the message will be requeued.
-     * 
+     *
      * <p><strong>N.B.</strong> There's a potential for infinite
      * redelivery in the event of non-transient failures (e.g. malformed
-     * messages). 
+     * messages).
      *
      */
     @Override
@@ -258,8 +259,7 @@ public class AMQPSpout implements IRichSpout {
                 final QueueingConsumer.Delivery delivery = amqpConsumer.nextDelivery(WAIT_FOR_NEXT_MESSAGE);
                 if (delivery == null) return;
                 final long deliveryTag = delivery.getEnvelope().getDeliveryTag();
-                final byte[] message = delivery.getBody();
-                collector.emit(serialisationScheme.deserialize(message), deliveryTag);
+                collector.emit(serialisationScheme.deserialize(delivery), deliveryTag);
                 /*
                  * TODO what to do about malformed messages? Skip?
                  * Avoid infinite retry!
